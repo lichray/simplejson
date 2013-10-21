@@ -117,9 +117,66 @@ def py_make_scanner(context):
         else:
             raise JSONDecodeError(errmsg, string, idx)
 
+    def _scan_once_counted(string, idx):
+        errmsg = 'Expecting value'
+        try:
+            nextchar = string[idx]
+        except IndexError:
+            raise JSONDecodeError(errmsg, string, idx)
+
+        def consume_object_size(sz):
+            context.max_object_size -= sz
+            if context.max_object_size < 0:
+                raise JSONDecodeError('Oversized document', string, idx)
+
+        if nextchar == '"':
+            s, end = parse_string(string, idx + 1, encoding, strict)
+            consume_object_size(len(s))
+            return s, end
+        elif nextchar == '{':
+            o, end = parse_object((string, idx + 1), encoding, strict,
+                _scan_once_counted, object_hook, object_pairs_hook, memo)
+            # pass scanstring from here?
+            consume_object_size(8 + sum(map(len, o.keys())))
+            return o, end
+        elif nextchar == '[':
+            o, end = parse_array((string, idx + 1), _scan_once_counted)
+            consume_object_size(8)
+            return o, end
+        elif nextchar == 'n' and string[idx:idx + 4] == 'null':
+            consume_object_size(8)
+            return None, idx + 4
+        elif nextchar == 't' and string[idx:idx + 4] == 'true':
+            consume_object_size(1)
+            return True, idx + 4
+        elif nextchar == 'f' and string[idx:idx + 5] == 'false':
+            consume_object_size(1)
+            return False, idx + 5
+
+        consume_object_size(8)
+        m = match_number(string, idx)
+        if m is not None:
+            integer, frac, exp = m.groups()
+            if frac or exp:
+                res = parse_float(integer + (frac or '') + (exp or ''))
+            else:
+                res = parse_int(integer)
+            return res, m.end()
+        elif nextchar == 'N' and string[idx:idx + 3] == 'NaN':
+            return parse_constant('NaN'), idx + 3
+        elif nextchar == 'I' and string[idx:idx + 8] == 'Infinity':
+            return parse_constant('Infinity'), idx + 8
+        elif nextchar == '-' and string[idx:idx + 9] == '-Infinity':
+            return parse_constant('-Infinity'), idx + 9
+        else:
+            raise JSONDecodeError(errmsg, string, idx)
+
     def scan_once(string, idx):
         try:
-            return _scan_once(string, idx)
+            if context.max_object_size is None:
+                return _scan_once(string, idx)
+            else:
+                return _scan_once_counted(string, idx)
         finally:
             memo.clear()
 

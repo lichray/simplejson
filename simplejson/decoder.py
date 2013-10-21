@@ -301,7 +301,7 @@ class JSONDecoder(object):
 
     def __init__(self, encoding=None, object_hook=None, parse_float=None,
             parse_int=None, parse_constant=None, strict=True,
-            object_pairs_hook=None):
+            object_pairs_hook=None, max_object_size=None):
         """
         *encoding* determines the encoding used to interpret any
         :class:`str` objects decoded by this instance (``'utf-8'`` by
@@ -353,6 +353,7 @@ class JSONDecoder(object):
         self.parse_float = parse_float or float
         self.parse_int = parse_int or int
         self.parse_constant = parse_constant or _CONSTANTS.__getitem__
+        self.max_object_size = max_object_size
         self.strict = strict
         self.parse_object = JSONObject
         self.parse_array = JSONArray
